@@ -2,6 +2,8 @@ import json
 import requests
 from pathlib import Path
 import os.path
+import pandas as pd
+import numpy as np
 
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 
@@ -64,13 +66,15 @@ def main():
             print("Saindo...")"""
     
     send_signal()
+    #list_images()
+    #download_image()
 
 
 def send_signal():
     resp = None
     while True:
-        path = input("Informe o caminho do arquivo: ")
-        path = "./files/g-1.csv" # TEMP
+        path = input("Informe o caminho do arquivo de sinal: ")
+        path = './files/a-1.csv' #TEMP
         file = Path(path)
         extension = os.path.splitext(path)[1]
         if file.is_file() and extension == '.csv':
@@ -78,10 +82,13 @@ def send_signal():
         else:
             print("Arquivo não encontrado ou com extensão não suportada!")
     
+    name = input("Informe o nome e a extensão do arquivo de imagem: ")
+    name = 'g5.png' #TEMP
+
     while True:
-        algorithm = input("Escolha o algoritmo utilizado\n[(1) - CGNE; (2) - FISTA]: ")
-        algorithm = '1' # TEMP
-        data = {'user' : un}
+        algorithm = input("Escolha o algoritmo utilizado\n[(1) - CGNE | (2) - FISTA]: ")
+        algorithm = '1' #TEMP
+        data = {'user' : un, 'name' : name}
 
         if algorithm != '1' and algorithm != '2':
             print("Opção não existente!")
@@ -93,12 +100,14 @@ def send_signal():
             elif algorithm == '2':
                 data['algorithm'] = 'FISTA'
 
-            with open(path, 'rb') as file:
-               form = MultipartEncoder({'signal' : ("g-1.csv", file, "application/octet-stream"),
-                                        'data' :  json.dumps(data)})
-               headers = {"Content-Type" : form.content_type}
-               resp = requests.post(url=URL + '/enviar_sinal', data=form, headers=headers)
+            vector = pd.read_csv(path, sep=';', header=None)
+            vector = vector.replace(',', '.', regex=True)
+            vector = vector.apply(pd.to_numeric, errors='coerce')
+            vector = vector.to_numpy()
 
+            data['signal'] = vector.tolist()
+            resp = requests.post(url=URL + '/enviar_sinal', json=data)
+            
             break
                
     if resp.ok:
@@ -110,17 +119,33 @@ def send_signal():
 def list_images():
     payload = {'user' : un}
     resp = requests.get(url=URL + '/listar_imagens', params=payload)
-    print(resp.json)
+    if resp.ok:
+        img_list= resp.json()
+        if len(img_list) > 0:
+            for image in img_list:
+                print("Usuário: " + image['username'] + "  Nome: " + image['name'])
+        
+        else:
+            print("Nenhuma imagem encontrada")
+        
+    else:
+        print("Não foi possível carregar a lista de imagens!")
 
 
 def download_image():
-    image = input("Qual imagem deseja baixar?: ")
-    payload = {'user' : un, 'image' : image}
+    name = input("Qual imagem deseja baixar?: ")
+    name = 'g1.png'
+    payload = {'user' : un, 'name' : name}
     resp = requests.get(url=URL + '/baixar_imagem', params=payload, stream=True)
-    if resp.status_code == 200:
+    if resp.ok:
         with open('img.png', 'wb') as file:
             for chunk in resp:
                 file.write(chunk)
+                
+        print("Imagem salva")
+    
+    else:
+        print("Não foi possível baixar a imagem")
 
 if __name__ == '__main__':
     main()
